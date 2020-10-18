@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation template to install one public subnet
+Parameters:
+  RegionName:
+    Description: What's the name of the AWS Region you are using?
+    Type: String
+    Default: London (eu-west-2)
+    AllowedValues:
+    - London (eu-west-2)
+    ConstraintDescription: MUST be the name of an existing AWS Region.
+  KeyPairName:
+    Description: Please select then name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: MUST be the name of an existing EC2 KeyPair.
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - Label: 
+          default: "Configuration of the Template"
+        Parameters: 
+          - RegionName
+          - KeyPairName
+    ParameterLabels: 
+      RegionName: 
+        default: Name of the AWS Region
+      KeyPairName:
+        default: Name of the Key Pair
+Resources:
+  # VPC | vpc-01
+  Vpc01:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      InstanceTenancy: default
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: vpc-01
+  # Internet Gateway | vpc-01-igw-01
+  Vpc01Igw01:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: vpc-01-igw-01
+  # Attach the Internet Gateway to the VPC | -
+  AttachIgw01ToVpc01:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: Vpc01
+      InternetGatewayId:
+        Ref: Vpc01Igw01
+  # (Public) Route Table | vpc-01-public-rt-01
+  Vpc01PublicRt01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc01
+      Tags:
+        - Key: Name
+          Value: vpc-01-public-rt-01
+  # (Public) Subnet | vpc-01-public-sn-01
+  Vpc01PublicSn01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: eu-west-2a
+      MapPublicIpOnLaunch: true
+      VpcId:
+        Ref: Vpc01
+      Tags:
+        - Key: Name
+          Value: vpc-01-public-sn-01
+  # Associate the (Public) Subnet to the (Public) Route Table
+  AssociateVpc01PublicSn01ToVpc01PublicRt01:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: Vpc01PublicSn01
+      RouteTableId:
+        Ref: Vpc01PublicRt01
+  # Add the (Public) Route into the (Public) Route Table
+  PublicRoute01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: Vpc01PublicRt01
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: Vpc01Igw01
+    DependsOn: Vpc01Igw01
+  # Security Group | vpc-01-sg-01
+  Vpc01Sg01:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable access to port 80 (HTTP) for anywhere
+      VpcId:
+        Ref: Vpc01
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: vpc-01-sg-01
+  # Instance | vpc-01-public-sn-01-i-01
+  Vpc01PublicSn01I01:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-09a1e275e350acf38
+      InstanceType: t2.micro
+      KeyName:
+        Ref: KeyPairName
+      UserData: IyEvYmluL2Jhc2gKZWNobyAnVGhpcyBpcyB0aGUgZXZpZGVuY2UgdGhhdCB0aGUgc2NyaXB0IHByb3ZpZGVkIHZpYSBVc2VyRGF0YSBoYXMgYmVlbiBleGVjdXRlZCA7LSknID4gL2hvbWUvdWJ1bnR1L2V2aWRlbmNlLnR4dAphcHQgLXkgdXBkYXRlIC15ID4gL2hvbWUvdWJ1bnR1L2FwdC11cGRhdGUubG9nCmFwdCAteSBpbnN0YWxsIG5naW54ID4gL2hvbWUvdWJ1bnR1L2FwdC1pbnN0YWxsLW5naW54LmxvZwo=
+      NetworkInterfaces:
+        - Description: Primary network interface
+          DeviceIndex: 0
+          AssociatePublicIpAddress: true
+          SubnetId:
+            Ref: Vpc01PublicSn01
+          GroupSet:
+            - Ref: Vpc01Sg01
+      Tags:
+        - Key: Name
+          Value: vpc-01-public-sn-01-i-01
